@@ -1,6 +1,6 @@
 import os, strutils, sequtils
 
-let input = readFile("inputs"/"02").split(",").mapIt(strip(it).parseInt)
+let input = readFile("inputs"/"02").strip.split(",").map(parseInt)
 
 template opStore(op) =
   let
@@ -20,13 +20,12 @@ proc compute(inputMem: seq[int]; noun, verb: int): int =
     of 2: opStore(`*`)
     of 99: break
     else: discard
-
   return mem[0]
 
 echo "part1: ", compute(input, 12, 2)
 
-for noun in 0 ..< 100:
-  for verb in 0 ..< 100:
+for noun in 0 .. 99:
+  for verb in 0 .. 99:
     if compute(input, noun, verb) == 19690720:
       echo "part2: ", 100 * noun + verb
       quit()
