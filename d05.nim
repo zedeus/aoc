@@ -12,12 +12,22 @@ type
     opcode: Opcode
     args: seq[int]
 
-proc parseOp(mem: seq[int]; ip: int): Operation =
+  Program* = ref object
+    mem*: seq[int]
+    args*: seq[int]
+    outs*: seq[int]
+    halted*: bool
+    ip, argp: int
+
+proc `[]`(prog: Program; i: int): int = prog.mem[i]
+proc `[]=`(prog: Program; i, v: int) = prog.mem[i] = v
+
+proc nextOp(prog: Program): Operation =
   template setOp(op, count) =
     result.opcode = op
     result.args = newSeq[int](count)
 
-  let op = mem[ip]
+  let op = prog[prog.ip]
   case op mod 10
   of 1: setOp(Add, 3)
   of 2: setOp(Multi, 3)
@@ -33,38 +43,44 @@ proc parseOp(mem: seq[int]; ip: int): Operation =
   for i in 1 .. result.args.len:
     if (result.opcode notin {JmpT, JmpF} and i >= result.args.len) or
        sip.len >= i + 2 and sip[i + 1] == '1':
-      result.args[i - 1] = mem[ip + i]
+      result.args[i - 1] = prog[prog.ip + i]
     else:
-      result.args[i - 1] = mem[mem[ip + i]]
+      result.args[i - 1] = prog[prog[prog.ip + i]]
 
-proc compute(inputMem: seq[int]) =
-  var mem = inputMem
-
-  var ip = 0
-  while ip < mem.high:
-    let op = mem.parseOp(ip)
-    ip.inc op.args.len + 1
-
+proc compute*(prog: Program; args: varargs[int]) =
+  if prog.halted: return
+  prog.args.add @args
+  while prog.ip < prog.mem.high:
+    let op = prog.nextOp()
     case op.opcode
     of Add:
-      mem[op.args[2]] = op.args[0] + op.args[1]
+      prog[op.args[2]] = op.args[0] + op.args[1]
     of Multi:
-      mem[op.args[2]] = op.args[0] * op.args[1]
+      prog[op.args[2]] = op.args[0] * op.args[1]
     of Less:
-      mem[op.args[2]] = if op.args[0] < op.args[1]: 1 else: 0
+      prog[op.args[2]] = int(op.args[0] < op.args[1])
     of Equal:
-      mem[op.args[2]] = if op.args[0] == op.args[1]: 1 else: 0
-    of Input:
-      stdout.write("Input: ")
-      mem[op.args[0]] = stdin.readLine().parseInt
-    of Output:
-      echo mem[op.args[0]]
+      prog[op.args[2]] = int(op.args[0] == op.args[1])
     of JmpT:
-      if op.args[0] != 0: ip = op.args[1]
+      if op.args[0] != 0: prog.ip = op.args[1]; continue
     of JmpF:
-      if op.args[0] == 0: ip = op.args[1]
+      if op.args[0] == 0: prog.ip = op.args[1]; continue
+    of Input:
+      if prog.argp == prog.args.len: return
+      prog[op.args[0]] = prog.args[prog.argp]; prog.argp.inc
+    of Output:
+      prog.outs.add prog[op.args[0]]
     of Halt:
-      break
+      prog.halted = true; break
 
-let input = readFile("inputs"/"05").strip.split(",").map(parseInt)
-compute(input)
+    prog.ip.inc op.args.len + 1
+
+when isMainModule:
+  let
+    input = readFile("inputs"/"05").strip.split(",").map(parseInt)
+    part1 = Program(mem: input)
+    part2 = Program(mem: input)
+  compute(part1, 1)
+  compute(part2, 5)
+  echo "part1: ", part1.outs[^1]
+  echo "part2: ", part2.outs[^1]
