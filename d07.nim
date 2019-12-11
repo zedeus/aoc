@@ -4,7 +4,7 @@ import d05
 let input = readFile("inputs/07").strip().split(",").map(parseInt)
 
 proc amplify(mem: seq[int]; phases: seq[int]): int =
-  var amps = phases.mapIt(Program(mem: mem, args: @[it]))
+  var amps = phases.mapIt(newProgram(mem, @[it]))
   var last = 0
   while amps.allIt(not it.halted):
     for amp in amps:

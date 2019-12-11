@@ -1,4 +1,4 @@
-import os, strutils, sequtils, algorithm
+import os, strutils, sequtils, algorithm, tables, math
 
 type
   Opcode = enum
@@ -6,21 +6,28 @@ type
     Input, Output,
     JmpT, JmpF,
     Less, Equal,
-    Halt
+    RelOffset, Halt
 
   Operation = object
     opcode: Opcode
     args: seq[int]
 
   Program* = ref object
-    mem*: seq[int]
+    mem*: OrderedTable[int, int]
     args*: seq[int]
     outs*: seq[int]
     halted*: bool
-    ip, argp: int
+    ip, argp, rel: int
 
-proc `[]`(prog: Program; i: int): int = prog.mem[i]
-proc `[]=`(prog: Program; i, v: int) = prog.mem[i] = v
+proc `[]`(prog: Program; i: int): int =
+  if i notin prog.mem: prog.mem[i] = 0
+  prog.mem[i]
+
+proc `[]=`(prog: Program; i, v: int) =
+  prog.mem[i] = v
+
+proc newProgram*(input: seq[int]; args: varargs[int]): Program =
+  Program(mem: toSeq(input.pairs()).toOrderedTable, args: @args)
 
 proc nextOp(prog: Program): Operation =
   template setOp(op, count) =
@@ -28,7 +35,7 @@ proc nextOp(prog: Program): Operation =
     result.args = newSeq[int](count)
 
   let op = prog[prog.ip]
-  case op mod 10
+  case op mod 100
   of 1: setOp(Add, 3)
   of 2: setOp(Multi, 3)
   of 3: setOp(Input, 1)
@@ -37,20 +44,28 @@ proc nextOp(prog: Program): Operation =
   of 6: setOp(JmpF, 2)
   of 7: setOp(Less, 3)
   of 8: setOp(Equal, 3)
+  of 9: setOp(RelOffset, 1)
   else: setOp(Halt, 0)
 
-  let sip = @($op).reversed()
-  for i in 1 .. result.args.len:
-    if (result.opcode notin {JmpT, JmpF} and i >= result.args.len) or
-       sip.len >= i + 2 and sip[i + 1] == '1':
-      result.args[i - 1] = prog[prog.ip + i]
+  for i in 0 .. result.args.high:
+    let
+      ip = prog.ip + i + 1
+      mode = op div 10^(i + 2) mod 10
+      writes = result.opcode notin {Output, JmpF, JmpT, RelOffset}
+
+    if mode == 2:
+      result.args[i] = prog.rel + prog[ip]
     else:
-      result.args[i - 1] = prog[prog[prog.ip + i]]
+      result.args[i] = prog[ip]
+
+    if i < result.args.high or not writes and mode != 1:
+      if mode != 1:
+        result.args[i] = prog[result.args[i]]
 
 proc compute*(prog: Program; args: varargs[int]) =
   if prog.halted: return
   prog.args.add @args
-  while prog.ip < prog.mem.high:
+  while not prog.halted:
     let op = prog.nextOp()
     case op.opcode
     of Add:
@@ -69,7 +84,9 @@ proc compute*(prog: Program; args: varargs[int]) =
       if prog.argp == prog.args.len: return
       prog[op.args[0]] = prog.args[prog.argp]; prog.argp.inc
     of Output:
-      prog.outs.add prog[op.args[0]]
+      prog.outs.add op.args[0]
+    of RelOffset:
+      prog.rel += op.args[0]
     of Halt:
       prog.halted = true; break
 
@@ -78,8 +95,8 @@ proc compute*(prog: Program; args: varargs[int]) =
 when isMainModule:
   let
     input = readFile("inputs"/"05").strip.split(",").map(parseInt)
-    part1 = Program(mem: input)
-    part2 = Program(mem: input)
+    part1 = newProgram(input)
+    part2 = newProgram(input)
   compute(part1, 1)
   compute(part2, 5)
   echo "part1: ", part1.outs[^1]
