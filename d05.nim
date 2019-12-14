@@ -1,4 +1,4 @@
-import os, strutils, sequtils, algorithm, tables, math
+import sequtils, tables, math
 
 type
   Opcode = enum
@@ -93,6 +93,8 @@ proc compute*(prog: Program; args: varargs[int]) =
     prog.ip.inc op.args.len + 1
 
 when isMainModule:
+  import os, strutils
+
   let
     input = readFile("inputs"/"05").strip.split(",").map(parseInt)
     part1 = newProgram(input)
